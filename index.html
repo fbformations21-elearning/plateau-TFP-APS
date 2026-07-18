@@ -392,26 +392,22 @@
 <div class="hint" id="hint" style="display:none"></div>
 <div class="rotate-tip" id="rotateTip">📱 Tourne ton écran en <b>paysage</b> pour une meilleure vue</div>
 
-<!-- Identification du stagiaire (Supabase) -->
+<!-- Accès stagiaire (token LearnFlow) -->
 <div class="overlay" id="sbIntro" style="display:none">
   <div class="card">
     <div class="flag"></div>
     <div class="body">
-      <span class="depart-badge">🪪 Identification</span>
-      <h1>Avant de commencer</h1>
-      <p>Renseigne ton identité : ta progression et tes réponses seront enregistrées pour ton formateur.</p>
-      <div class="sb-row">
-        <div class="sb-field"><label>Prénom</label><input id="sbPrenom" type="text" autocomplete="given-name"></div>
-        <div class="sb-field"><label>Nom</label><input id="sbNom" type="text" autocomplete="family-name"></div>
+      <span class="depart-badge">🔗 Accès formation</span>
+      <h1>Code d'accès</h1>
+      <p>Saisis le code fourni par ton formateur pour que ta progression soit enregistrée.</p>
+      <div class="sb-field">
+        <label>Code d'accès</label>
+        <input id="sbToken" type="text" placeholder="LF-XXXXXXXX" maxlength="12"
+               oninput="this.value=this.value.toUpperCase()">
       </div>
-      <div class="sb-field"><label>Code session / groupe (facultatif)</label><input id="sbCode" type="text"></div>
-      <button class="btn" id="sbGo">Démarrer le parcours →</button>
+      <button class="btn" id="sbGo">Accéder →</button>
       <button class="btn ghost" id="sbSkip" style="margin-top:9px">Continuer sans enregistrement</button>
-      <div id="sbErr" style="display:none;margin-top:10px;font-size:12.5px;color:#ffb3b8;line-height:1.4"></div>
-      <button class="btn ghost" id="sbSchema" style="display:none;margin-top:9px">🔎 Voir les tables disponibles</button>
-      <pre id="sbSchemaOut" style="display:none;margin-top:9px;max-height:190px;overflow:auto;font-size:11px;
-        line-height:1.45;background:#0b1c2e;border:1px solid #274b74;border-radius:9px;padding:10px;
-        color:#cfe0f3;white-space:pre-wrap"></pre>
+      <div id="sbErr" style="display:none;margin-top:10px;font-size:13px;color:#ffb3b8;line-height:1.4"></div>
     </div>
   </div>
 </div>
@@ -838,117 +834,79 @@
    ============================================================ */
 
 /* ============================================================
-   SUPABASE — enregistrement des sessions, de la progression et des QCU
-   >>> Colle ta cle "anon public" ci-dessous pour activer l'enregistrement.
-   Tant qu'elle est vide, le simulateur fonctionne normalement (hors ligne).
+   LEARNFLOW / SUPABASE — meme systeme que les autres simulateurs
+   Acces par token (table "liens") -> apprenant + formation
+   Progression enregistree dans "progressions" (cle + score)
    ============================================================ */
-const SB = {
-  url:      'https://oebnvaxvmrmyvuiuuzwh.supabase.co',
-  anonKey:  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lYm52YXh2bXJteXZ1aXV1endoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5ODYwMTUsImV4cCI6MjA5MDU2MjAxNX0.pxqus1VcvJqZx-1gGsAsLJodsUD91JGRk4CQuWme7dQ',
-  tables:   { sessions:'aps_sessions', events:'aps_events', qcu:'aps_reponses_qcu' },
-  module:   'parcours-aps-3d',      // identifiant de ce simulateur
-  formation_id: null,               // id dans ta table "formations" (optionnel)
-  sessionId:null, stagiaire:null, token:null, t0:Date.now(), pending:[], ok:false, tried:false
-};
-const sbOn = ()=> !!(SB.url && SB.anonKey);
-/* Identite transmise par la plateforme FBFormations21 e-academy :
-   ...html?uid=123&prenom=Florent&nom=Baverel&formation_id=17535&session=GRP-A&token=<jwt>
-   Alias acceptes pour chaque champ, afin de coller a ton format existant. */
-function sbFromUrl(){
-  const q=new URLSearchParams(location.search);
-  const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
-  h.forEach((v,k)=>{ if(!q.has(k)) q.set(k,v); });   // token possible dans le hash
-  const pick=(...keys)=>{ for(const k of keys){ const v=q.get(k); if(v) return v.trim(); } return null; };
-  const id = {
-    uid:          pick('uid','user_id','user','stagiaire_id','apprenant_id','eleve_id'),
-    prenom:       pick('prenom','firstname','first_name','fn'),
-    nom:          pick('nom','lastname','last_name','ln'),
-    email:        pick('email','mail'),
-    code:         pick('session','session_id','groupe','group','code','classe'),
-    formation_id: pick('formation_id','formation','cours_id','module_id'),
-    token:        pick('token','jwt','access_token','t')
-  };
-  id.present = !!(id.uid || id.email || id.nom || id.prenom || id.token);
-  return id;
+const SUPA_URL='https://oebnvaxvmrmyvuiuuzwh.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lYm52YXh2bXJteXZ1aXV1endoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5ODYwMTUsImV4cCI6MjA5MDU2MjAxNX0.pxqus1VcvJqZx-1gGsAsLJodsUD91JGRk4CQuWme7dQ';
+const SES={ token:'', lien:null, apprenant:null, formation:null, ok:false, t0:Date.now() };
+const PROGS={};
+async function supa(method,table,body=null,filter=''){
+  const res=await fetch(`${SUPA_URL}/rest/v1/${table}${filter}`,{
+    method,
+    headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+             'Prefer':method==='POST'?'return=representation':'','x-token':SES.token},
+    body:body?JSON.stringify(body):null
+  });
+  if(!res.ok){ throw new Error((await res.text()).slice(0,180)); }
+  if(res.status===204) return null;
+  const t=await res.text(); return t?JSON.parse(t):null;
 }
-
-async function sbFetch(path, opt={}){
-  const r = await fetch(SB.url+'/rest/v1/'+path, Object.assign({}, opt, {
-    headers: Object.assign({
-      apikey: SB.anonKey, Authorization: 'Bearer '+(SB.token || SB.anonKey),
-      'Content-Type': 'application/json', Prefer: opt.prefer || 'return=representation'
-    }, opt.headers||{})
-  }));
-  const txt = await r.text();
-  if(!r.ok) throw new Error('Supabase '+r.status+' — '+txt.slice(0,160));
-  return txt ? JSON.parse(txt) : null;
-}
+const db={ get:(t,f='')=>supa('GET',t,null,f), post:(t,b)=>supa('POST',t,b),
+           patch:(t,b,f)=>supa('PATCH',t,b,f) };
 function sbBadge(state,msg){
   const b=document.getElementById('hudSb'); if(!b) return;
-  b.style.display = sbOn() ? 'inline-block' : 'none';
-  b.textContent = state==='ok' ? '🟢' : state==='wait' ? '🟠' : '🔴';
-  b.title = msg || (state==='ok' ? 'Enregistrement actif' : 'Enregistrement indisponible');
+  b.style.display='inline-block';
+  b.textContent = state==='ok'?'🟢' : state==='wait'?'🟠' : '🔴';
+  b.title = msg || (state==='ok'?'Progression enregistrée':'Hors ligne');
 }
-async function sbStartSession(info){
-  SB.stagiaire = info; SB.t0 = Date.now();
-  if(!sbOn()){ sbBadge('off','Clé Supabase non renseignée'); return null; }
-  sbBadge('wait','Connexion…');
+/* Validation du token, comme dans le portail stagiaire */
+async function sbEnterToken(tok){
+  const token=(tok||'').trim().toUpperCase();
+  if(!token) throw new Error('Veuillez saisir votre code.');
+  SES.token=token;
+  const liens=await db.get('liens','?token=eq.'+encodeURIComponent(token));
+  if(!liens.length) throw new Error('Code non reconnu.');
+  const lien=liens[0];
+  if(!lien.active || new Date(lien.expiry) < new Date()) throw new Error('Lien expiré ou désactivé.');
+  if(lien.acces!==-1 && lien.used>=lien.acces) throw new Error("Nombre d'accès maximum atteint.");
+  const [apprenants,formations]=await Promise.all([
+    db.get('apprenants','?id=eq.'+lien.apprenant_id),
+    db.get('formations','?id=eq.'+lien.formation_id)
+  ]);
+  if(!apprenants.length||!formations.length) throw new Error('Données introuvables.');
+  await db.patch('liens',{used:lien.used+1},'?id=eq.'+lien.id);
+  const progs=await db.get('progressions','?apprenant_id=eq.'+apprenants[0].id+'&formation_id=eq.'+formations[0].id);
+  progs.forEach(pr=>PROGS[pr.cle]=pr.score);
+  SES.lien=lien; SES.apprenant=apprenants[0]; SES.formation=formations[0]; SES.ok=true; SES.t0=Date.now();
+  sbBadge('ok','Progression enregistrée');
+  return SES;
+}
+/* Enregistrement d'une progression : meme convention que LearnFlow */
+const getCle=(mid,pidx)=>`m${mid}-p${pidx}`;
+async function sbSaveProgression(mid,pidx,score){
+  if(!SES.ok) return;
+  const cle=getCle(mid,pidx); PROGS[cle]=score;
   try{
-    const row = Object.assign({
-      module: SB.module, nom: info.nom||null, prenom: info.prenom||null,
-      code: info.code||null, debut: new Date().toISOString()
-    }, info.uid?{utilisateur_id:info.uid}:{}, info.email?{email:info.email}:{},
-       SB.formation_id?{formation_id:SB.formation_id}:{});
-    const res = await sbFetch(SB.tables.sessions, {method:'POST', body:JSON.stringify(row)});
-    SB.sessionId = res && res[0] ? (res[0].id ?? res[0].uuid ?? null) : null;
-    SB.ok = true; sbBadge('ok','Session enregistrée');
-    sbFlush();
-  }catch(e){ SB.ok=false; sbBadge('off', e.message); console.warn('[Supabase]', e.message); }
-  return SB.sessionId;
+    const existing=await db.get('progressions',
+      '?apprenant_id=eq.'+SES.apprenant.id+'&formation_id=eq.'+SES.formation.id+'&cle=eq.'+cle);
+    if(existing.length) await db.patch('progressions',{score,updated_at:new Date().toISOString()},'?id=eq.'+existing[0].id);
+    else await db.post('progressions',{apprenant_id:SES.apprenant.id,formation_id:SES.formation.id,cle,score});
+    sbBadge('ok','Progression enregistrée');
+  }catch(e){ sbBadge('wait',e.message); console.warn('[progression]',e.message); }
 }
-function sbLog(type, data){
-  if(!sbOn()) return;
-  SB.pending.push({ session_id:SB.sessionId, module:SB.module, type:type,
-                    donnees:data||{}, horodatage:new Date().toISOString() });
-  sbFlush();
-}
-let sbFlushing=false;
-async function sbFlush(){
-  if(!sbOn() || sbFlushing || !SB.pending.length) return;
-  sbFlushing=true;
-  const batch = SB.pending.splice(0, SB.pending.length).map(r=>Object.assign({}, r, {session_id:SB.sessionId}));
+/* Certificat / evaluation de fin, comme le portail stagiaire */
+async function sbSaveCertificat(score){
+  if(!SES.ok) return;
   try{
-    await sbFetch(SB.tables.events, {method:'POST', body:JSON.stringify(batch), prefer:'return=minimal'});
-    SB.ok=true; sbBadge('ok','Enregistrement actif');
-  }catch(e){
-    SB.pending = batch.concat(SB.pending);   // on remet en file pour reessayer
-    SB.ok=false; sbBadge('wait','Reprise en attente — '+e.message);
-  }finally{ sbFlushing=false; }
+    const ex=await db.get('certificats','?apprenant_id=eq.'+SES.apprenant.id+'&formation_id=eq.'+SES.formation.id);
+    if(!ex.length) await db.post('certificats',{apprenant_id:SES.apprenant.id,formation_id:SES.formation.id,score});
+    await db.post('evaluations',{apprenant_id:SES.apprenant.id,formation_id:SES.formation.id,score,passed:score>=70});
+  }catch(e){ console.warn('[certificat]',e.message); }
 }
-/* a appeler quand les QCU seront branches */
-async function sbLogQcu(o){
-  if(!sbOn()) return;
-  try{
-    await sbFetch(SB.tables.qcu, {method:'POST', prefer:'return=minimal', body:JSON.stringify({
-      session_id:SB.sessionId, module:SB.module, site:o.site||null, poste:o.poste||null,
-      question:o.question, reponse:o.reponse, correcte:!!o.correcte,
-      horodatage:new Date().toISOString()
-    })});
-  }catch(e){ console.warn('[Supabase QCU]', e.message); }
-}
-async function sbSchema(){
-  const spec = await sbFetch('');                     // OpenAPI expose par PostgREST
-  const defs = spec.definitions || (spec.components && spec.components.schemas) || {};
-  return Object.keys(defs).sort().map(t=>{
-    const props = defs[t].properties || {};
-    const cols = Object.keys(props).map(c=>{
-      const d=props[c]; return c+' ('+(d.format||d.type||'?')+')';
-    });
-    return '• '+t+'\n    '+cols.join(', ');
-  }).join('\n');
-}
-addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') sbFlush(); });
-addEventListener('beforeunload', ()=>{ sbFlush(); });
+/* Appelee par les QCU quand ils seront integres */
+function sbLogQcu(o){ return sbSaveProgression(o.module, o.partie, o.score); }
 
 /* ---- Contenu des étages (placeholders thématiques, à enrichir) ---- */
 const FLOORS = [
@@ -4147,80 +4105,62 @@ function loop(){
   renderer.render(scene,camera);
   requestAnimationFrame(loop);
 }
-/* ---- Branchement Supabase sur le parcours ---- */
+/* ---- Branchement LearnFlow sur le parcours ---- */
 (function sbWire(){
   const SITES={1:'Tour formation',2:'Agence',3:'Grand magasin',4:'Stade',5:'Discothèque',
     6:'Agence (6)',7:'Site industriel',8:'Salle de concert',9:'Centre de formation',
     10:'Administration',11:'Agence (fin)'};
-  // Identite : d'abord le lien de la plateforme, sinon le formulaire de secours
-  const fromUrl = sbFromUrl();
-  if(fromUrl.token) SB.token = fromUrl.token;
-  if(fromUrl.formation_id) SB.formation_id = fromUrl.formation_id;
-  if(sbOn() && fromUrl.present){
-    // lancement depuis FBFormations21 e-academy : aucun formulaire
-    $('sbIntro').style.display='none';
-    $('overviewOverlay').style.display='flex';
-    sbBadge('wait','Identification via la plateforme…');
-    sbStartSession(fromUrl).then(()=>{ if(SB.ok) sbLog('parcours_ouvert', {source:'plateforme'}); });
-  } else if(sbOn()){
-    $('overviewOverlay').style.display='none';
-    $('sbIntro').style.display='grid';
-    sbBadge('off','En attente d\'identification');
-  }
-  // si le simulateur est integre en iframe, la plateforme peut aussi pousser l'identite
-  addEventListener('message', ev=>{
-    const d=ev.data; if(!d || d.type!=='fb-identity' || SB.sessionId) return;
-    if(d.token) SB.token=d.token;
-    if(d.formation_id) SB.formation_id=d.formation_id;
-    $('sbIntro').style.display='none'; $('overviewOverlay').style.display='flex';
-    sbStartSession(d).then(()=>{ if(SB.ok) sbLog('parcours_ouvert', {source:'iframe'}); });
-  });
-  const demarrer=async(withSb)=>{
-    $('sbIntro').style.display='none';
-    $('overviewOverlay').style.display='flex';
-    if(withSb){
-      await sbStartSession({ prenom:$('sbPrenom').value.trim(), nom:$('sbNom').value.trim(),
-                             code:$('sbCode').value.trim() });
-      if(!SB.ok){                      // tables absentes / RLS : on prévient sans bloquer
-        $('sbIntro').style.display='grid'; $('overviewOverlay').style.display='none';
-        const e=$('sbErr'); e.style.display='block';
-        $('sbSchema').style.display='block';
-        e.innerHTML='⚠️ Connexion Supabase impossible.<br>'+
-          ($('hudSb').title||'')+'<br>Vérifie que les tables existent et que la policy d\'insertion est active. '+
-          'Tu peux continuer sans enregistrement.';
-        return;
-      }
-      sbLog('parcours_ouvert', {});
-    } else { SB.anonKey=''; sbBadge('off','Enregistrement désactivé'); }
-  };
-  if($('sbGo'))   $('sbGo').onclick   = ()=>demarrer(true);
-  if($('sbSkip')) $('sbSkip').onclick = ()=>demarrer(false);
-  if($('sbSchema')) $('sbSchema').onclick = async ()=>{
-    const out=$('sbSchemaOut'); out.style.display='block'; out.textContent='Lecture du schéma…';
-    try{ out.textContent = await sbSchema() || 'Aucune table exposée.'; }
-    catch(e){ out.textContent = 'Impossible de lire le schéma : '+e.message; }
-  };
-  if($('hudSb'))  $('hudSb').onclick  = ()=>{ sbFlush();
-    const st=$('status'), old=st.textContent;
-    st.textContent = (SB.ok?'Enregistrement OK':'Hors ligne')+' · '+SB.pending.length+' en file';
-    setTimeout(()=>{ st.textContent=old; },2600); };
+  const q=new URLSearchParams(location.search);
+  const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
+  const urlToken=(q.get('token')||q.get('t')||h.get('token')||'').trim().toUpperCase();
 
-  // enveloppe les fonctions existantes pour tracer la progression
+  const ouvrirParcours=()=>{ $('sbIntro').style.display='none'; $('overviewOverlay').style.display='flex'; };
+  const echec=(msg)=>{ const e=$('sbErr'); e.style.display='block'; e.textContent=msg;
+    $('sbGo').disabled=false; $('sbGo').textContent='Accéder →'; sbBadge('off',msg); };
+
+  async function valider(tok){
+    $('sbGo').disabled=true; $('sbGo').textContent='Vérification…'; sbBadge('wait','Vérification du code…');
+    try{
+      await sbEnterToken(tok);
+      const a=SES.apprenant.data||{};
+      $('status').textContent=((a.prenom||'')+' '+(a.nom||'')).trim()||'Stagiaire';
+      ouvrirParcours();
+    }catch(e){ echec(e.message); }
+  }
+
+  // acces : token dans le lien -> automatique, sinon ecran de saisie
+  $('overviewOverlay').style.display='none';
+  $('sbIntro').style.display='grid';
+  if(urlToken){ $('sbToken').value=urlToken; valider(urlToken); }
+  else sbBadge('off','Code non saisi');
+
+  $('sbGo').onclick   = ()=>valider($('sbToken').value);
+  $('sbToken').onkeydown = ev=>{ if(ev.key==='Enter') valider($('sbToken').value); };
+  $('sbSkip').onclick = ()=>{ ouvrirParcours(); sbBadge('off','Enregistrement désactivé'); };
+  if($('hudSb')) $('hudSb').onclick = ()=>{
+    const st=$('status'), old=st.textContent;
+    st.textContent = SES.ok ? 'Progression enregistrée' : 'Sans enregistrement';
+    setTimeout(()=>{ st.textContent=old; },2400);
+  };
+
+  // progression : chaque site visite = un module, chaque poste = une partie
   const wrap=(name,fn)=>{ const o=window[name]; if(typeof o!=='function') return;
     window[name]=function(...a){ try{ fn(...a); }catch(e){} return o.apply(this,a); }; };
-  wrap('goToSite', n=> sbLog('site_ouvert', {site:n, nom:SITES[n]||null}));
-  wrap('startSeg', cfg=> sbLog('troncon', {id:cfg&&cfg.id}));
-  const postes=[['selectPost','magasin'],['selectStadPost','stade'],['selectIndustPost','industriel'],
-    ['selectSecuZone','agence 6'],['selectConcPost','concert'],['selectDiscoPost','discothèque'],
-    ['selectAdminZone','administration'],['selectAgencyRoom','agence 2'],['selectAgfRoom','agence 11']];
-  postes.forEach(([fn,site])=> wrap(fn, id=> sbLog('poste_ouvert', {site, poste:id})));
-  const scenes=[['openClassroom','salle de formation'],['openAccueil','accueil magasin'],
-    ['openCaisse','arrière-caisse'],['openCctv','simulateur vidéo'],['openInterp','salle interpellation'],
-    ['openPalpation','palpation stade'],['openLoge','loges'],['openTerrain','bord de terrain'],
-    ['openBuvette','buvette'],['openVestiaire','vestiaires'],['openTribune','tribune']];
-  scenes.forEach(([fn,nom])=> wrap(fn, ()=> sbLog('scene_ouverte', {scene:nom})));
-  wrap('finishParcours', ()=> sbLog('parcours_termine', {duree_s: Math.round((Date.now()-SB.t0)/1000)}));
-  wrap('selectFloor', f=> sbLog('niveau_ouvert', {niveau:(FLOORS[f]||{}).lvl||f}));
+  const POSTE_IDX={};                       // memorise l'ordre des postes par site
+  const idxOf=(site,id)=>{ POSTE_IDX[site]=POSTE_IDX[site]||[];
+    let k=POSTE_IDX[site].indexOf(id); if(k<0){ POSTE_IDX[site].push(id); k=POSTE_IDX[site].length-1; } return k; };
+  let siteCourant=1;
+  wrap('goToSite', n=>{ siteCourant=n; });
+  const sites={selectPost:3,selectStadPost:4,selectIndustPost:7,selectSecuZone:6,
+               selectConcPost:8,selectDiscoPost:5,selectAdminZone:10,selectAgencyRoom:2,selectAgfRoom:11};
+  Object.entries(sites).forEach(([fn,site])=> wrap(fn, id=>{ siteCourant=site; idxOf(site,id); }));
+  wrap('selectFloor', f=>{ siteCourant=1; });
+  // fin de parcours : moyenne des scores enregistres
+  wrap('finishParcours', ()=>{
+    const vals=Object.values(PROGS); if(!vals.length) return;
+    sbSaveCertificat(Math.round(vals.reduce((a,b)=>a+b,0)/vals.length));
+  });
+  window.APS = { site:()=>siteCourant, cle:getCle, save:sbSaveProgression, idx:idxOf };
 })();
 
 setWorldVisible(false);          // au démarrage : on montre la maquette d'ensemble
