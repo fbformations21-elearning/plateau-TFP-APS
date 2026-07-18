@@ -173,6 +173,24 @@
     .sheet{left:10px;right:10px;width:auto}
   }
 
+  /* ---- Mode compact force par ?format=tablette ---- */
+  body.compact .hud{top:8px;left:8px;padding:6px 10px;gap:8px}
+  body.compact .hud .logo{width:28px;height:28px;font-size:12px}
+  body.compact .hud .site small{display:none}
+  body.compact .hud .hudbtn{width:28px;height:28px;font-size:14px}
+  body.compact .floors{right:9px;gap:6px}
+  body.compact .floor{padding:6px 9px;gap:8px}
+  body.compact .floor .txt .t1{font-size:11.5px}
+  body.compact .floor .txt .t2{display:none}
+  body.compact .floor .lvl{width:32px;height:32px;font-size:13px}
+  body.compact .sheet{left:9px;bottom:9px;width:min(320px,46vw);padding:10px 12px}
+  body.compact .sheet h4{font-size:14px}
+  body.compact .sheet p{font-size:12px;line-height:1.42}
+  body.compact .card{width:min(560px,76vw);max-height:92vh;overflow:auto}
+  body.compact .card .body{padding:18px 20px}
+  body.compact .card h1{font-size:20px}
+  body.compact .classroom-card{width:94vw;height:92vh}
+
   /* ---- Invite : passer en paysage (portrait sur mobile) ---- */
   .sb-field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
   .sb-field label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700}
@@ -4113,6 +4131,7 @@ function loop(){
   const q=new URLSearchParams(location.search);
   const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
   const urlToken=(q.get('token')||q.get('t')||h.get('token')||'').trim().toUpperCase();
+  if((q.get('format')||'').toLowerCase()==='tablette') document.body.classList.add('compact');
 
   const ouvrirParcours=()=>{ $('sbIntro').style.display='none'; $('overviewOverlay').style.display='flex'; };
   const echec=(msg)=>{ const e=$('sbErr'); e.style.display='block'; e.textContent=msg;

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Installation — Parcours Pro APS (Ville 3D)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f4f0;color:#2b2925;
+       min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}
+  .box{background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.08);
+       padding:2.5rem;width:100%;max-width:560px}
+  .logo{width:52px;height:52px;border-radius:12px;background:#185FA5;color:#fff;
+        display:grid;place-items:center;font-weight:800;font-size:18px;margin-bottom:1.2rem}
+  h1{font-size:22px;margin-bottom:.5rem}
+  p.lead{font-size:13px;color:#6b6860;line-height:1.6;margin-bottom:1.5rem}
+  label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+        color:#6b6860;font-weight:700;margin-bottom:5px}
+  input{width:100%;font-family:inherit;font-size:13px;padding:11px 13px;border-radius:9px;
+        border:1px solid #ddd9d0;background:#fafaf7;margin-bottom:1rem}
+  input:focus{outline:none;border-color:#185FA5}
+  .btn{width:100%;border:none;border-radius:10px;padding:14px;font-family:inherit;
+       font-size:15px;font-weight:600;background:#185FA5;color:#fff;cursor:pointer}
+  .btn:disabled{opacity:.55;cursor:default}
+  .steps{display:none;margin-top:1.5rem}
+  .step{display:flex;align-items:center;gap:12px;padding:9px 0;font-size:13px}
+  .step-icon{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+             font-size:12px;font-weight:700;flex:none}
+  .s-wait{background:#eceae4;color:#8a867c}
+  .s-load{background:#fff3d6;color:#a07800}
+  .s-ok{background:#d9f2e5;color:#1D9E75}
+  .s-err{background:#fbdcdc;color:#c0392b}
+  .status{display:none;margin-top:1.3rem;padding:14px 16px;border-radius:10px;
+          font-size:13px;line-height:1.6}
+  .status.ok{background:#eaf7f1;color:#12674c;border:1px solid #b9e5d2}
+  .status.err{background:#fdecec;color:#a5281d;border:1px solid #f3c2be}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">APS</div>
+  <h1>Parcours Pro APS — Ville 3D</h1>
+  <p class="lead">Ajoute ce simulateur à ta table <strong>formations</strong> LearnFlow.
+     Tu pourras ensuite générer des liens d'accès depuis le portail admin, comme pour tes autres simulateurs.</p>
+
+  <label>URL du simulateur (dossier contenant index.html)</label>
+  <input id="url" type="text" value="https://fbformations21-elearning.github.io/plateau-TFP-APS/">
+
+  <label>Titre affiché</label>
+  <input id="titre" type="text" value="Parcours Pro APS — Ville 3D">
+
+  <button class="btn" id="btn" onclick="installer()">Installer la formation</button>
+
+  <div class="steps" id="steps">
+    <div class="step" id="s1"><div class="step-icon s-wait" id="i1">1</div><div>Connexion à Supabase</div></div>
+    <div class="step" id="s2"><div class="step-icon s-wait" id="i2">2</div><div>Vérification des doublons</div></div>
+    <div class="step" id="s3"><div class="step-icon s-wait" id="i3">3</div><div>Insertion dans formations</div></div>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+const SUPA_URL='https://oebnvaxvmrmyvuiuuzwh.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lYm52YXh2bXJteXZ1aXV1endoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5ODYwMTUsImV4cCI6MjA5MDU2MjAxNX0.pxqus1VcvJqZx-1gGsAsLJodsUD91JGRk4CQuWme7dQ';
+
+async function supa(method,table,body=null,filter=''){
+  const res=await fetch(`${SUPA_URL}/rest/v1/${table}${filter}`,{
+    method,
+    headers:{'Content-Type':'application/json','apikey':SUPA_KEY,
+             'Authorization':'Bearer '+SUPA_KEY,
+             'Prefer':method==='POST'?'return=representation':''},
+    body:body?JSON.stringify(body):null
+  });
+  if(!res.ok){const e=await res.text();throw new Error(e);}
+  if(res.status===204)return null;
+  return res.json();
+}
+function setStep(n,state,text){
+  const icons={wait:'s-wait',load:'s-load',ok:'s-ok',err:'s-err'};
+  const labels={wait:n,load:'⟳',ok:'✓',err:'✗'};
+  const el=document.getElementById('i'+n);
+  el.className='step-icon '+icons[state];
+  el.textContent=labels[state];
+  if(text){document.getElementById('s'+n).querySelector('div:last-child').textContent=text;}
+}
+function showStatus(msg,type){
+  const s=document.getElementById('status');
+  s.style.display='block'; s.className='status '+type; s.innerHTML=msg;
+}
+
+async function installer(){
+  const btn=document.getElementById('btn');
+  const titre=document.getElementById('titre').value.trim();
+  const url=document.getElementById('url').value.trim();
+  if(!titre||!url){showStatus('❌ Renseigne le titre et l\'URL.','err');return;}
+
+  btn.disabled=true; btn.textContent='Installation en cours...';
+  document.getElementById('steps').style.display='block';
+
+  const FORMATION={
+    title: titre,
+    desc: "Parcours 3D interactif : 11 sites de la sécurité privée (agence, grand magasin, stade, discothèque, site industriel Seveso, salle de concert, centre de formation, établissement administratif). Postes de l'agent illustrés et simulateur de vidéosurveillance.",
+    duree: "1h30",
+    cat: "Sécurité",
+    niveau: "Débutant",
+    simulateur_url: url,
+    questions: []
+  };
+
+  try{
+    setStep(1,'load','Connexion à Supabase...');
+    await new Promise(r=>setTimeout(r,400));
+    setStep(1,'ok','Connexion établie ✓');
+
+    setStep(2,'load','Vérification des doublons...');
+    const existing=await supa('GET','formations','', '?select=id&data->>title=eq.'+encodeURIComponent(titre));
+    if(existing&&existing.length>0){
+      setStep(2,'ok','Formation déjà présente');
+      setStep(3,'ok','Insertion ignorée');
+      showStatus('✅ Cette formation existe déjà (id '+existing[0].id+').<br><br>'+
+                 'Ouvre ton <a href="https://fbformations21-elearning.github.io/formation/learnflow-admin.html" style="color:#185FA5">portail admin</a> '+
+                 'pour générer des liens d\'accès.','ok');
+      btn.textContent='✓ Déjà installé';
+      return;
+    }
+    setStep(2,'ok','Aucun doublon ✓');
+
+    setStep(3,'load','Insertion dans formations...');
+    const res=await supa('POST','formations',{data:FORMATION},'');
+    const id=res&&res[0]?res[0].id:'?';
+    setStep(3,'ok','Formation insérée ✓');
+
+    showStatus('🎉 <strong>Installation réussie !</strong><br><br>'+
+               '« '+titre+' » (id '+id+') est maintenant dans ta table <strong>formations</strong>.<br><br>'+
+               '→ Ouvre le <a href="https://fbformations21-elearning.github.io/formation/learnflow-admin.html" style="color:#185FA5;font-weight:600">portail admin</a> '+
+               'pour générer un lien d\'accès stagiaire.','ok');
+    btn.textContent='✓ Installation terminée';
+
+  }catch(e){
+    showStatus('❌ Erreur : '+e.message+'<br><br>Vérifie ta connexion et les policies RLS de la table formations.','err');
+    btn.disabled=false; btn.textContent='🔄 Réessayer';
+    [1,2,3].forEach(i=>{if(document.getElementById('i'+i).classList.contains('s-load'))setStep(i,'err','Erreur');});
+  }
+}
+</script>
+</body>
+</html>
